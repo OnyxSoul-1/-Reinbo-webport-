@@ -26,46 +26,65 @@
         <div id="status-notice"></div>
     </div>
 
-    <!-- THE MERGER SCRIPT (This stitches the parts together) -->
+    <!-- HARDCODED MERGER SCRIPT -->
     <script>
         const originalFetch = window.fetch;
+        
         window.fetch = async function(url, options) {
             const urlStr = url.toString();
             
-            async function fetchAndMerge(baseName) {
-                let parts = [];
-                let i = 1;
-                // Loop until a part is not found (like part10)
-                while (true) {
-                    let res = await originalFetch(`${baseName}.part${i}`);
-                    if (!res.ok) break;
-                    parts.push(await res.arrayBuffer());
-                    i++;
-                }
-                if (parts.length === 0) throw new Error(`No parts found for ${baseName}!`);
-
-                const totalLength = parts.reduce((acc, val) => acc + val.byteLength, 0);
-                const merged = new Uint8Array(totalLength);
-                let offset = 0;
-                for (const part of parts) {
-                    merged.set(new Uint8Array(part), offset);
-                    offset += part.byteLength;
-                }
-                return merged;
-            }
-
-            if (urlStr.endsWith('index.pck')) {
+            // Fetch exactly 9 PCK parts
+            if (urlStr.includes('index.pck')) {
                 try {
-                    const merged = await fetchAndMerge('index.pck');
+                    console.log("Merging 9 PCK parts...");
+                    const parts = await Promise.all([
+                        originalFetch('./index.pck.part1').then(r => r.arrayBuffer()),
+                        originalFetch('./index.pck.part2').then(r => r.arrayBuffer()),
+                        originalFetch('./index.pck.part3').then(r => r.arrayBuffer()),
+                        originalFetch('./index.pck.part4').then(r => r.arrayBuffer()),
+                        originalFetch('./index.pck.part5').then(r => r.arrayBuffer()),
+                        originalFetch('./index.pck.part6').then(r => r.arrayBuffer()),
+                        originalFetch('./index.pck.part7').then(r => r.arrayBuffer()),
+                        originalFetch('./index.pck.part8').then(r => r.arrayBuffer()),
+                        originalFetch('./index.pck.part9').then(r => r.arrayBuffer())
+                    ]);
+                    
+                    const totalLength = parts.reduce((acc, val) => acc + val.byteLength, 0);
+                    const merged = new Uint8Array(totalLength);
+                    let offset = 0;
+                    for (const part of parts) {
+                        merged.set(new Uint8Array(part), offset);
+                        offset += part.byteLength;
+                    }
                     return new Response(merged, { status: 200, headers: new Headers({ 'Content-Type': 'application/octet-stream' }) });
-                } catch (e) { console.error("PCK Merge failed:", e); return originalFetch(url, options); }
+                } catch (e) { 
+                    console.error("PCK Merge failed:", e); 
+                    return originalFetch(url, options); 
+                }
             }
             
-            if (urlStr.endsWith('index.wasm')) {
+            // Fetch exactly 3 WASM parts
+            if (urlStr.includes('index.wasm')) {
                 try {
-                    const merged = await fetchAndMerge('index.wasm');
+                    console.log("Merging 3 WASM parts...");
+                    const parts = await Promise.all([
+                        originalFetch('./index.wasm.part1').then(r => r.arrayBuffer()),
+                        originalFetch('./index.wasm.part2').then(r => r.arrayBuffer()),
+                        originalFetch('./index.wasm.part3').then(r => r.arrayBuffer())
+                    ]);
+                    
+                    const totalLength = parts.reduce((acc, val) => acc + val.byteLength, 0);
+                    const merged = new Uint8Array(totalLength);
+                    let offset = 0;
+                    for (const part of parts) {
+                        merged.set(new Uint8Array(part), offset);
+                        offset += part.byteLength;
+                    }
                     return new Response(merged, { status: 200, headers: new Headers({ 'Content-Type': 'application/wasm' }) });
-                } catch (e) { console.error("WASM Merge failed:", e); return originalFetch(url, options); }
+                } catch (e) { 
+                    console.error("WASM Merge failed:", e); 
+                    return originalFetch(url, options); 
+                }
             }
             
             return originalFetch(url, options);
