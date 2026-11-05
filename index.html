@@ -11,32 +11,37 @@
         body { color: white; background-color: black; overflow: hidden; touch-action: none; }
         #canvas { display: block; width: 100vw; height: 100vh; outline: none; }
         #status { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: #242424; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10; }
-        #status-splash { max-height: 100%; max-width: 100%; margin: auto; }
         #status-progress { width: 50%; margin: 0 auto; position: absolute; bottom: 10%; }
-        #status-notice { display: none; background-color: #5b3943; border-radius: 0.5rem; border: 1px solid #9b3943; color: #e0e0e0; font-family: 'Noto Sans', 'Droid Sans', Arial, sans-serif; line-height: 1.3; margin: 0 2rem; overflow: hidden; padding: 1rem; text-align: center; }
     </style>
 </head>
 <body>
     <canvas id="canvas">Your browser does not support the canvas tag.</canvas>
-    <noscript>Your browser does not support JavaScript.</noscript>
-
     <div id="status">
         <img id="status-splash" src="index.png" alt="">
         <progress id="status-progress"></progress>
         <div id="status-notice"></div>
     </div>
 
-    <!-- HARDCODED MERGER SCRIPT -->
+    <!-- 1. REGISTER SERVICE WORKER FOR OFFLINE CACHE -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js').then(() => {
+                console.log("Service Worker registered. Files are cached for offline use.");
+            }).catch((err) => {
+                console.error("Service Worker failed:", err);
+            });
+        }
+    </script>
+
+    <!-- 2. MERGER SCRIPT -->
     <script>
         const originalFetch = window.fetch;
-        
         window.fetch = async function(url, options) {
             const urlStr = url.toString();
             
-            // Fetch exactly 9 PCK parts
+            // PCK Merger
             if (urlStr.includes('index.pck')) {
                 try {
-                    console.log("Merging 9 PCK parts...");
                     const parts = await Promise.all([
                         originalFetch('./index.pck.part1').then(r => r.arrayBuffer()),
                         originalFetch('./index.pck.part2').then(r => r.arrayBuffer()),
@@ -57,16 +62,12 @@
                         offset += part.byteLength;
                     }
                     return new Response(merged, { status: 200, headers: new Headers({ 'Content-Type': 'application/octet-stream' }) });
-                } catch (e) { 
-                    console.error("PCK Merge failed:", e); 
-                    return originalFetch(url, options); 
-                }
+                } catch (e) { console.error("PCK Merge failed:", e); return originalFetch(url, options); }
             }
             
-            // Fetch exactly 3 WASM parts
+            // WASM Merger
             if (urlStr.includes('index.wasm')) {
                 try {
-                    console.log("Merging 3 WASM parts...");
                     const parts = await Promise.all([
                         originalFetch('./index.wasm.part1').then(r => r.arrayBuffer()),
                         originalFetch('./index.wasm.part2').then(r => r.arrayBuffer()),
@@ -81,21 +82,17 @@
                         offset += part.byteLength;
                     }
                     return new Response(merged, { status: 200, headers: new Headers({ 'Content-Type': 'application/wasm' }) });
-                } catch (e) { 
-                    console.error("WASM Merge failed:", e); 
-                    return originalFetch(url, options); 
-                }
+                } catch (e) { console.error("WASM Merge failed:", e); return originalFetch(url, options); }
             }
             
             return originalFetch(url, options);
         };
     </script>
 
-    <!-- YOUR ORIGINAL GODOT SCRIPT -->
+    <!-- 3. GODOT BOOTSTRAP -->
     <script src="index.js"></script>
     <script>
         const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":176995216,"index.wasm":43016933},"focusCanvas":true,"gdextensionLibs":[]};
-        const GODOT_THREADS_ENABLED = false;
         const engine = new Engine(GODOT_CONFIG);
 
         (function () {
@@ -115,22 +112,13 @@
                 statusMode = mode;
             }
 
-            function setStatusNotice(text) {
-                while (statusNotice.lastChild) statusNotice.removeChild(statusNotice.lastChild);
-                text.split('\n').forEach((line) => {
-                    statusNotice.appendChild(document.createTextNode(line));
-                    statusNotice.appendChild(document.createElement('br'));
-                });
-            }
-
             function displayFailureNotice(err) {
                 console.error(err);
-                setStatusNotice(err.message || err || 'An unknown error occured');
                 setStatusMode('notice');
                 initializing = false;
             }
 
-            const missing = Engine.getMissingFeatures({ threads: GODOT_THREADS_ENABLED });
+            const missing = Engine.getMissingFeatures({ threads: false });
 
             if (missing.length !== 0) {
                 displayFailureNotice('Missing features:\n' + missing.join('\n'));
@@ -141,9 +129,6 @@
                         if (current > 0 && total > 0) {
                             statusProgress.value = current;
                             statusProgress.max = total;
-                        } else {
-                            statusProgress.removeAttribute('value');
-                            statusProgress.removeAttribute('max');
                         }
                     },
                 }).then(() => {
