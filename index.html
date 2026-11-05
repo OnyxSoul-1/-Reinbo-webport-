@@ -1,199 +1,137 @@
 <!DOCTYPE html>
-<html lang="en">
-	<head>
-		<meta charset="utf-8">
-		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
-		<title>Reinbo</title>
-		<style>
-html, body, #canvas {
-	margin: 0;
-	padding: 0;
-	border: 0;
-}
+<html lang="en-us">
+<head>
+    <meta charset="utf-8"/>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+    <title>Reinbo</title>
 
-body {
-	color: white;
-	background-color: black;
-	overflow: hidden;
-	touch-action: none;
-}
+    <style>
+        html, body, #canvas { margin: 0; padding: 0; border: 0; }
+        body { color: white; background-color: black; overflow: hidden; touch-action: none; }
+        #canvas { display: block; width: 100vw; height: 100vh; outline: none; }
+        #status { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: #242424; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10; }
+        #status-splash { max-height: 100%; max-width: 100%; margin: auto; }
+        #status-progress { width: 50%; margin: 0 auto; position: absolute; bottom: 10%; }
+        #status-notice { display: none; background-color: #5b3943; border-radius: 0.5rem; border: 1px solid #9b3943; color: #e0e0e0; font-family: 'Noto Sans', 'Droid Sans', Arial, sans-serif; line-height: 1.3; margin: 0 2rem; overflow: hidden; padding: 1rem; text-align: center; }
+    </style>
+</head>
+<body>
+    <canvas id="canvas">Your browser does not support the canvas tag.</canvas>
+    <noscript>Your browser does not support JavaScript.</noscript>
 
-#canvas {
-	display: block;
-}
+    <div id="status">
+        <img id="status-splash" src="index.png" alt="">
+        <progress id="status-progress"></progress>
+        <div id="status-notice"></div>
+    </div>
 
-#canvas:focus {
-	outline: none;
-}
+    <!-- THE MERGER SCRIPT (This stitches the parts together) -->
+    <script>
+        const originalFetch = window.fetch;
+        window.fetch = async function(url, options) {
+            const urlStr = url.toString();
+            
+            async function fetchAndMerge(baseName) {
+                let parts = [];
+                let i = 1;
+                // Loop until a part is not found (like part10)
+                while (true) {
+                    let res = await originalFetch(`${baseName}.part${i}`);
+                    if (!res.ok) break;
+                    parts.push(await res.arrayBuffer());
+                    i++;
+                }
+                if (parts.length === 0) throw new Error(`No parts found for ${baseName}!`);
 
-#status, #status-splash, #status-progress {
-	position: absolute;
-	left: 0;
-	right: 0;
-}
+                const totalLength = parts.reduce((acc, val) => acc + val.byteLength, 0);
+                const merged = new Uint8Array(totalLength);
+                let offset = 0;
+                for (const part of parts) {
+                    merged.set(new Uint8Array(part), offset);
+                    offset += part.byteLength;
+                }
+                return merged;
+            }
 
-#status, #status-splash {
-	top: 0;
-	bottom: 0;
-}
+            if (urlStr.endsWith('index.pck')) {
+                try {
+                    const merged = await fetchAndMerge('index.pck');
+                    return new Response(merged, { status: 200, headers: new Headers({ 'Content-Type': 'application/octet-stream' }) });
+                } catch (e) { console.error("PCK Merge failed:", e); return originalFetch(url, options); }
+            }
+            
+            if (urlStr.endsWith('index.wasm')) {
+                try {
+                    const merged = await fetchAndMerge('index.wasm');
+                    return new Response(merged, { status: 200, headers: new Headers({ 'Content-Type': 'application/wasm' }) });
+                } catch (e) { console.error("WASM Merge failed:", e); return originalFetch(url, options); }
+            }
+            
+            return originalFetch(url, options);
+        };
+    </script>
 
-#status {
-	background-color: #242424;
-	display: flex;
-	flex-direction: column;
-	justify-content: center;
-	align-items: center;
-	visibility: hidden;
-}
+    <!-- YOUR ORIGINAL GODOT SCRIPT -->
+    <script src="index.js"></script>
+    <script>
+        const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":176995216,"index.wasm":43016933},"focusCanvas":true,"gdextensionLibs":[]};
+        const GODOT_THREADS_ENABLED = false;
+        const engine = new Engine(GODOT_CONFIG);
 
-#status-splash {
-	max-height: 100%;
-	max-width: 100%;
-	margin: auto;
-}
+        (function () {
+            const statusOverlay = document.getElementById('status');
+            const statusProgress = document.getElementById('status-progress');
+            const statusNotice = document.getElementById('status-notice');
 
-#status-progress, #status-notice {
-	display: none;
-}
+            let initializing = true;
+            let statusMode = '';
 
-#status-progress {
-	bottom: 10%;
-	width: 50%;
-	margin: 0 auto;
-}
+            function setStatusMode(mode) {
+                if (statusMode === mode || !initializing) return;
+                if (mode === 'hidden') { statusOverlay.remove(); initializing = false; return; }
+                statusOverlay.style.visibility = 'visible';
+                statusProgress.style.display = mode === 'progress' ? 'block' : 'none';
+                statusNotice.style.display = mode === 'notice' ? 'block' : 'none';
+                statusMode = mode;
+            }
 
-#status-notice {
-	background-color: #5b3943;
-	border-radius: 0.5rem;
-	border: 1px solid #9b3943;
-	color: #e0e0e0;
-	font-family: 'Noto Sans', 'Droid Sans', Arial, sans-serif;
-	line-height: 1.3;
-	margin: 0 2rem;
-	overflow: hidden;
-	padding: 1rem;
-	text-align: center;
-	z-index: 1;
-}
-		</style>
-		<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
-<link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
+            function setStatusNotice(text) {
+                while (statusNotice.lastChild) statusNotice.removeChild(statusNotice.lastChild);
+                text.split('\n').forEach((line) => {
+                    statusNotice.appendChild(document.createTextNode(line));
+                    statusNotice.appendChild(document.createElement('br'));
+                });
+            }
 
-	</head>
-	<body>
-		<canvas id="canvas">
-			Your browser does not support the canvas tag.
-		</canvas>
+            function displayFailureNotice(err) {
+                console.error(err);
+                setStatusNotice(err.message || err || 'An unknown error occured');
+                setStatusMode('notice');
+                initializing = false;
+            }
 
-		<noscript>
-			Your browser does not support JavaScript.
-		</noscript>
+            const missing = Engine.getMissingFeatures({ threads: GODOT_THREADS_ENABLED });
 
-		<div id="status">
-			<img id="status-splash" src="index.png" alt="">
-			<progress id="status-progress"></progress>
-			<div id="status-notice"></div>
-		</div>
-
-		<script src="index.js"></script>
-		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":176995216,"index.wasm":43016933},"focusCanvas":true,"gdextensionLibs":[]};
-const GODOT_THREADS_ENABLED = false;
-const engine = new Engine(GODOT_CONFIG);
-
-(function () {
-	const statusOverlay = document.getElementById('status');
-	const statusProgress = document.getElementById('status-progress');
-	const statusNotice = document.getElementById('status-notice');
-
-	let initializing = true;
-	let statusMode = '';
-
-	function setStatusMode(mode) {
-		if (statusMode === mode || !initializing) {
-			return;
-		}
-		if (mode === 'hidden') {
-			statusOverlay.remove();
-			initializing = false;
-			return;
-		}
-		statusOverlay.style.visibility = 'visible';
-		statusProgress.style.display = mode === 'progress' ? 'block' : 'none';
-		statusNotice.style.display = mode === 'notice' ? 'block' : 'none';
-		statusMode = mode;
-	}
-
-	function setStatusNotice(text) {
-		while (statusNotice.lastChild) {
-			statusNotice.removeChild(statusNotice.lastChild);
-		}
-		const lines = text.split('\n');
-		lines.forEach((line) => {
-			statusNotice.appendChild(document.createTextNode(line));
-			statusNotice.appendChild(document.createElement('br'));
-		});
-	}
-
-	function displayFailureNotice(err) {
-		console.error(err);
-		if (err instanceof Error) {
-			setStatusNotice(err.message);
-		} else if (typeof err === 'string') {
-			setStatusNotice(err);
-		} else {
-			setStatusNotice('An unknown error occured');
-		}
-		setStatusMode('notice');
-		initializing = false;
-	}
-
-	const missing = Engine.getMissingFeatures({
-		threads: GODOT_THREADS_ENABLED,
-	});
-
-	if (missing.length !== 0) {
-		if (GODOT_CONFIG['serviceWorker'] && GODOT_CONFIG['ensureCrossOriginIsolationHeaders'] && 'serviceWorker' in navigator) {
-			// There's a chance that installing the service worker would fix the issue
-			Promise.race([
-				navigator.serviceWorker.getRegistration().then((registration) => {
-					if (registration != null) {
-						return Promise.reject(new Error('Service worker already exists.'));
-					}
-					return registration;
-				}).then(() => engine.installServiceWorker()),
-				// For some reason, `getRegistration()` can stall
-				new Promise((resolve) => {
-					setTimeout(() => resolve(), 2000);
-				}),
-			]).catch((err) => {
-				console.error('Error while registering service worker:', err);
-			}).then(() => {
-				window.location.reload();
-			});
-		} else {
-			// Display the message as usual
-			const missingMsg = 'Error\nThe following features required to run Godot projects on the Web are missing:\n';
-			displayFailureNotice(missingMsg + missing.join('\n'));
-		}
-	} else {
-		setStatusMode('progress');
-		engine.startGame({
-			'onProgress': function (current, total) {
-				if (current > 0 && total > 0) {
-					statusProgress.value = current;
-					statusProgress.max = total;
-				} else {
-					statusProgress.removeAttribute('value');
-					statusProgress.removeAttribute('max');
-				}
-			},
-		}).then(() => {
-			setStatusMode('hidden');
-		}, displayFailureNotice);
-	}
-}());
-		</script>
-	</body>
+            if (missing.length !== 0) {
+                displayFailureNotice('Missing features:\n' + missing.join('\n'));
+            } else {
+                setStatusMode('progress');
+                engine.startGame({
+                    'onProgress': function (current, total) {
+                        if (current > 0 && total > 0) {
+                            statusProgress.value = current;
+                            statusProgress.max = total;
+                        } else {
+                            statusProgress.removeAttribute('value');
+                            statusProgress.removeAttribute('max');
+                        }
+                    },
+                }).then(() => {
+                    setStatusMode('hidden');
+                }, displayFailureNotice);
+            }
+        }());
+    </script>
+</body>
 </html>
-
