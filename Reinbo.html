@@ -4,7 +4,7 @@
     <meta charset="utf-8"/>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
-    <title>Reinbo</title>
+    <title>Reinbo - Ported by OnyxSoul-1</title>
 
     <style>
         html, body, #canvas { margin: 0; padding: 0; border: 0; }
@@ -12,30 +12,23 @@
         #canvas { display: block; width: 100vw; height: 100vh; outline: none; }
         #status { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: #242424; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10; }
         #status-progress { width: 50%; margin: 0 auto; position: absolute; bottom: 10%; }
+        .credit { position: absolute; bottom: 20px; right: 20px; color: rgba(255, 255, 255, 0.4); font-family: sans-serif; font-size: 14px; font-weight: bold; z-index: 100; pointer-events: none; }
     </style>
 </head>
 <body>
     <canvas id="canvas">Your browser does not support the canvas tag.</canvas>
+    
     <div id="status">
-        <img id="status-splash" src="index.png" alt="">
+        <img id="status-splash" src="https://raw.githack.com/OnyxSoul-1/-Reinbo-webport-/main/index.png" alt="">
         <progress id="status-progress"></progress>
         <div id="status-notice"></div>
     </div>
 
-    <script>
-        // Register Service Worker for offline caching
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./sw.js').then(() => {
-                console.log("Service Worker registered.");
-            }).catch((err) => {
-                console.error("Service Worker failed:", err);
-            });
-        }
-    </script>
+    <div class="credit">Ported by Onyx$oul-1</div>
 
     <script>
-        // Point directly to GitHub Pages, bypassing the jsDelivr 20MB limit
-        const HOST_URL = "https://onyxsoul-1.github.io/-Reinbo-webport-/";
+        // GITHACK CDN URL
+        const HOST_URL = "https://raw.githack.com/OnyxSoul-1/-Reinbo-webport-/main/";
         const originalFetch = window.fetch;
         
         window.fetch = async function(url, options) {
@@ -54,16 +47,12 @@
                         originalFetch(HOST_URL + 'index.pck.part8').then(r => r.arrayBuffer()),
                         originalFetch(HOST_URL + 'index.pck.part9').then(r => r.arrayBuffer())
                     ]);
-                    
                     const totalLength = parts.reduce((acc, val) => acc + val.byteLength, 0);
                     const merged = new Uint8Array(totalLength);
                     let offset = 0;
-                    for (const part of parts) {
-                        merged.set(new Uint8Array(part), offset);
-                        offset += part.byteLength;
-                    }
+                    for (const part of parts) { merged.set(new Uint8Array(part), offset); offset += part.byteLength; }
                     return new Response(merged, { status: 200, headers: new Headers({ 'Content-Type': 'application/octet-stream' }) });
-                } catch (e) { console.error("PCK Merge failed:", e); return originalFetch(url, options); }
+                } catch (e) { return originalFetch(url, options); }
             }
             
             if (urlStr.includes('index.wasm')) {
@@ -73,66 +62,43 @@
                         originalFetch(HOST_URL + 'index.wasm.part2').then(r => r.arrayBuffer()),
                         originalFetch(HOST_URL + 'index.wasm.part3').then(r => r.arrayBuffer())
                     ]);
-                    
                     const totalLength = parts.reduce((acc, val) => acc + val.byteLength, 0);
                     const merged = new Uint8Array(totalLength);
                     let offset = 0;
-                    for (const part of parts) {
-                        merged.set(new Uint8Array(part), offset);
-                        offset += part.byteLength;
-                    }
+                    for (const part of parts) { merged.set(new Uint8Array(part), offset); offset += part.byteLength; }
                     return new Response(merged, { status: 200, headers: new Headers({ 'Content-Type': 'application/wasm' }) });
-                } catch (e) { console.error("WASM Merge failed:", e); return originalFetch(url, options); }
+                } catch (e) { return originalFetch(url, options); }
             }
-            
             return originalFetch(url, options);
         };
     </script>
 
-    <script src="index.js"></script>
+    <script src="https://raw.githack.com/OnyxSoul-1/-Reinbo-webport-/main/index.js"></script>
     <script>
         const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":176995216,"index.wasm":43016933},"focusCanvas":true,"gdextensionLibs":[]};
         const engine = new Engine(GODOT_CONFIG);
-
         (function () {
             const statusOverlay = document.getElementById('status');
             const statusProgress = document.getElementById('status-progress');
-            const statusNotice = document.getElementById('status-notice');
-
             let initializing = true;
             let statusMode = '';
-
             function setStatusMode(mode) {
                 if (statusMode === mode || !initializing) return;
                 if (mode === 'hidden') { statusOverlay.remove(); initializing = false; return; }
-                statusOverlay.style.visibility = 'visible';
                 statusProgress.style.display = mode === 'progress' ? 'block' : 'none';
-                statusNotice.style.display = mode === 'notice' ? 'block' : 'none';
                 statusMode = mode;
             }
-
-            function displayFailureNotice(err) {
-                console.error(err);
-                setStatusMode('notice');
-                initializing = false;
-            }
-
+            function displayFailureNotice(err) { console.error(err); setStatusMode('notice'); initializing = false; }
             const missing = Engine.getMissingFeatures({ threads: false });
-
             if (missing.length !== 0) {
                 displayFailureNotice('Missing features:\n' + missing.join('\n'));
             } else {
                 setStatusMode('progress');
                 engine.startGame({
                     'onProgress': function (current, total) {
-                        if (current > 0 && total > 0) {
-                            statusProgress.value = current;
-                            statusProgress.max = total;
-                        }
+                        if (current > 0 && total > 0) { statusProgress.value = current; statusProgress.max = total; }
                     },
-                }).then(() => {
-                    setStatusMode('hidden');
-                }, displayFailureNotice);
+                }).then(() => { setStatusMode('hidden'); }, displayFailureNotice);
             }
         }());
     </script>
